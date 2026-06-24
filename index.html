@@ -88,9 +88,14 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-4); }
-  .col-resizer { position:absolute; top:0; bottom:0; width:20px; transform:translateX(-50%); cursor:col-resize; z-index:6; display:flex; align-items:center; justify-content:center; touch-action:none; }
-  .col-resizer .grip { display:block; width:6px; height:48px; max-height:55%; background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.22); border-radius:5px; box-shadow:0 1px 5px rgba(0,0,0,.4); transition:background .15s, transform .1s; pointer-events:none; }
+  .col-resizer, .row-resizer { position:absolute; z-index:6; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  .col-resizer { top:0; bottom:0; width:20px; transform:translateX(-50%); cursor:col-resize; }
+  .row-resizer { height:20px; transform:translateY(-50%); cursor:row-resize; }
+  .col-resizer .grip, .row-resizer .grip { display:block; background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.22); border-radius:5px; box-shadow:0 1px 5px rgba(0,0,0,.4); transition:background .15s, transform .1s; pointer-events:none; }
+  .col-resizer .grip { width:6px; height:48px; max-height:55%; }
+  .row-resizer .grip { width:48px; height:6px; max-width:55%; }
   .col-resizer:hover .grip, .col-resizer.dragging .grip { background:var(--accent); transform:scaleX(1.25); }
+  .row-resizer:hover .grip, .row-resizer.dragging .grip { background:var(--accent); transform:scaleY(1.25); }
   @media (max-width: 700px) {
     .two-col { grid-template-columns: 1fr !important; }
     .container { padding: 16px 12px 60px; }
@@ -161,7 +166,7 @@
         <button class="secondary-btn" onclick="resetLayoutRatios()" style="padding:3px 8px;font-size:11px;">↺ 칸 비율 초기화</button>
       </div>
       <div id="layoutPicker" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;"></div>
-      <p id="resizeHint" style="font-size:11px;color:var(--text-4);margin:8px 0 0;line-height:1.5;display:none;">↔ 미리보기에서 칸 사이의 손잡이를 마우스로 드래그하면 칸 넓이를 조절할 수 있어요.</p>
+      <p id="resizeHint" style="font-size:11px;color:var(--text-4);margin:8px 0 0;line-height:1.5;display:none;">↔↕ 미리보기에서 칸 사이의 손잡이를 드래그하면 넓이(좌우)와 높이(위아래)를 조절할 수 있어요.</p>
     </div>
 
     <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
@@ -447,15 +452,24 @@ const state = {
   titleFont: 'inherit',
   iconSize: 40,           // 게임 아이콘 크기(px)
   iconShape: 'circle',    // 'circle' | 'rounded' | 'square'
-  layoutRatios: {},       // 레이아웃별 칸 넓이 비율(좌측 칸 비중 0.2~0.8)
+  layoutRatios: {},       // 레이아웃별 칸 가로 넓이 비율(좌측 칸 비중 0.2~0.8)
+  layoutRowRatios: {},    // 레이아웃별 칸 세로 높이 비율(상단 칸 비중 0.2~0.8)
   selectedCards: []  // 묶음 내보내기용 선택 카드 ID
 };
 
-// 칸 넓이 조절 가능한 레이아웃의 기본 비율(좌측 칸 비중)
-const DEFAULT_RATIOS = { '2h':0.5, '1+2':0.5, '2+1':0.5, '1+3':0.667, '1+4':0.6 };
+// 칸 넓이(가로) 조절 가능한 레이아웃의 기본 비율(좌측 칸 비중)
+const DEFAULT_RATIOS = { '2h':0.5, '1+2':0.5, '2+1':0.5, '1+3':0.667, '1+4':0.6, '2x2':0.5 };
+// 칸 높이(세로) 조절 가능한 레이아웃의 기본 비율(상단 칸 비중)
+const DEFAULT_ROW_RATIOS = { '1+2':0.5, '2+1':0.5, '2x2':0.5 };
+// 세로 핸들이 실제로 작동하는 영역(분할이 있는 쪽): 'right' | 'left' | 'full'
+const ROW_SPLIT_SIDE = { '1+2':'right', '2+1':'left', '2x2':'full' };
 function getRatio(layout) {
   const r = state.layoutRatios && state.layoutRatios[layout];
   return (typeof r === 'number' && r >= 0.2 && r <= 0.8) ? r : (DEFAULT_RATIOS[layout] || 0.5);
+}
+function getRowRatio(layout) {
+  const r = state.layoutRowRatios && state.layoutRowRatios[layout];
+  return (typeof r === 'number' && r >= 0.2 && r <= 0.8) ? r : (DEFAULT_ROW_RATIOS[layout] || 0.5);
 }
 
 const presets = {
@@ -519,7 +533,8 @@ function saveState() {
       titleFont: state.titleFont,
       iconSize: state.iconSize,
       iconShape: state.iconShape,
-      layoutRatios: state.layoutRatios
+      layoutRatios: state.layoutRatios,
+      layoutRowRatios: state.layoutRowRatios
     }));
     updateSaveStatus();
   } catch(e) {
@@ -546,6 +561,7 @@ function loadState() {
     if (typeof data.iconSize === 'number') state.iconSize = data.iconSize;
     if (typeof data.iconShape === 'string') state.iconShape = data.iconShape;
     if (data.layoutRatios && typeof data.layoutRatios === 'object') state.layoutRatios = data.layoutRatios;
+    if (data.layoutRowRatios && typeof data.layoutRowRatios === 'object') state.layoutRowRatios = data.layoutRowRatios;
   } catch(e) { console.warn('Load failed:', e); }
 }
 
@@ -1535,18 +1551,20 @@ function buildImageBlock(images, layout, forExport) {
   const img = u => `<img src="${escapeHtml(u)}" style="${imgStyle}" alt="">`;
   const cell = (u, extra='') => `<div style="${cellBase}${extra}">${img(u)}</div>`;
   const urls = images.map(i => i.src);
-  // 칸 넓이 조절: 미리보기에는 data-rz 마커를 달아 드래그 핸들을 붙이고, 저장된 비율로 컬럼 폭 계산
+  // 칸 넓이 조절: 미리보기에는 data-rz(가로)/data-rz-row(세로) 마커를 달아 드래그 핸들을 붙이고, 저장된 비율로 칸 크기 계산
   const colTpl = (id) => { const r = getRatio(id); return `${r}fr ${(1-r).toFixed(4)}fr`; };
+  const rowTpl = (id) => { const r = getRowRatio(id); return `${r}fr ${(1-r).toFixed(4)}fr`; };
   const rz = (id) => forExport ? '' : ` data-rz="${id}"`;
+  const rzRow = (id) => forExport ? '' : ` data-rz-row="${id}"`;
 
   if (layout === '1') return `<div style="width:100%;aspect-ratio:11/9;${cellBase}border-radius:4px;">${img(urls[0])}</div>`;
   if (layout === 'col') return `<div style="display:grid;gap:6px;">${images.map(im => `<div style="${cellBase}border-radius:4px;aspect-ratio:${im.ratio || 1.4};">${img(im.src)}</div>`).join('')}</div>`;
   if (layout === '2h' && urls.length >= 2) return `<div${rz('2h')} style="display:grid;grid-template-columns:${colTpl('2h')};gap:6px;aspect-ratio:2/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}</div>`;
   if (layout === '2v' && urls.length >= 2) return `<div style="display:grid;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:13/14;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}</div>`;
-  if (layout === '1+2' && urls.length >= 3) return `<div${rz('1+2')} style="display:grid;grid-template-columns:${colTpl('1+2')};grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
-  if (layout === '2+1' && urls.length >= 3) return `<div${rz('2+1')} style="display:grid;grid-template-columns:${colTpl('2+1')};grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}<div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[1])}</div>${cell(urls[2],'border-radius:4px;')}</div>`;
+  if (layout === '1+2' && urls.length >= 3) return `<div${rz('1+2')}${rzRow('1+2')} style="display:grid;grid-template-columns:${colTpl('1+2')};grid-template-rows:${rowTpl('1+2')};gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
+  if (layout === '2+1' && urls.length >= 3) return `<div${rz('2+1')}${rzRow('2+1')} style="display:grid;grid-template-columns:${colTpl('2+1')};grid-template-rows:${rowTpl('2+1')};gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}<div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[1])}</div>${cell(urls[2],'border-radius:4px;')}</div>`;
   if (layout === '3v' && urls.length >= 3) return `<div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;aspect-ratio:11/15;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
-  if (layout === '2x2' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div>`;
+  if (layout === '2x2' && urls.length >= 4) return `<div${rz('2x2')}${rzRow('2x2')} style="display:grid;grid-template-columns:${colTpl('2x2')};grid-template-rows:${rowTpl('2x2')};gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div>`;
   if (layout === '1+3' && urls.length >= 4) return `<div${rz('1+3')} style="display:grid;grid-template-columns:${colTpl('1+3')};gap:6px;aspect-ratio:11/10;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div></div>`;
   if (layout === '3h' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;aspect-ratio:3/1.4;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
   if (layout === 'top1+2' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"><div style="${cellBase}border-radius:4px;grid-column:1/3;aspect-ratio:2/1;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}${cell(urls[2],'border-radius:4px;aspect-ratio:1;')}</div>`;
@@ -1637,64 +1655,96 @@ function render() {
   attachResizers();
 }
 
-// 미리보기에 칸 넓이 드래그 핸들 부착
+// 미리보기에 칸 넓이/높이 드래그 핸들 부착
 function attachResizers() {
   const preview = $('preview');
   if (!preview) return;
-  const targets = preview.querySelectorAll('[data-rz]');
+  const colTargets = preview.querySelectorAll('[data-rz]');
+  const rowTargets = preview.querySelectorAll('[data-rz-row]');
   const hint = $('resizeHint');
-  if (hint) hint.style.display = targets.length ? 'block' : 'none';
-  targets.forEach(grid => {
-    const layout = grid.getAttribute('data-rz');
-    grid.style.position = 'relative';
-    const gap = parseFloat(getComputedStyle(grid).columnGap) || 6;
-    const handle = document.createElement('div');
-    handle.className = 'col-resizer';
-    handle.innerHTML = '<span class="grip"></span>';
-    grid.appendChild(handle);
-    const place = () => {
+  if (hint) hint.style.display = (colTargets.length || rowTargets.length) ? 'block' : 'none';
+  colTargets.forEach(grid => attachHandle(grid, 'col'));
+  rowTargets.forEach(grid => attachHandle(grid, 'row'));
+}
+
+// axis: 'col' = 세로 손잡이를 좌우로 드래그(칸 넓이) / 'row' = 가로 손잡이를 위아래로 드래그(칸 높이)
+function attachHandle(grid, axis) {
+  const horiz = axis === 'col';
+  const layout = grid.getAttribute(horiz ? 'data-rz' : 'data-rz-row');
+  grid.style.position = 'relative';
+  const store = horiz ? state.layoutRatios : state.layoutRowRatios;
+  const getR = () => horiz ? getRatio(layout) : getRowRatio(layout);
+  const handle = document.createElement('div');
+  handle.className = horiz ? 'col-resizer' : 'row-resizer';
+  handle.innerHTML = '<span class="grip"></span>';
+  grid.appendChild(handle);
+
+  const place = () => {
+    const cs = getComputedStyle(grid);
+    const r = getR();
+    if (horiz) {
       const w = grid.clientWidth;
-      const r = getRatio(layout);
+      const gap = parseFloat(cs.columnGap) || 6;
       handle.style.left = (r * (w - gap) + gap / 2) + 'px';
-    };
-    place();
-    const start = (e) => {
-      e.preventDefault();
-      handle.classList.add('dragging');
-      document.body.style.cursor = 'col-resize';
-      const rect = grid.getBoundingClientRect();
-      let latest = getRatio(layout);
-      const move = (ev) => {
-        const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-        let r = (cx - rect.left) / rect.width;
-        r = Math.max(0.2, Math.min(0.8, r));
-        latest = r;
+    } else {
+      const h = grid.clientHeight, w = grid.clientWidth;
+      const gap = parseFloat(cs.rowGap) || 6;
+      handle.style.top = (r * (h - gap) + gap / 2) + 'px';
+      // 분할이 있는 쪽에만 손잡이가 닿도록 가로 범위 제한
+      const side = ROW_SPLIT_SIDE[layout] || 'full';
+      const cgap = parseFloat(cs.columnGap) || 6;
+      const cb = getRatio(layout) * (w - cgap) + cgap / 2;
+      if (side === 'right') { handle.style.left = cb + 'px'; handle.style.right = '0px'; }
+      else if (side === 'left') { handle.style.left = '0px'; handle.style.right = (w - cb) + 'px'; }
+      else { handle.style.left = '0px'; handle.style.right = '0px'; }
+    }
+  };
+  place();
+
+  const start = (e) => {
+    e.preventDefault();
+    handle.classList.add('dragging');
+    document.body.style.cursor = horiz ? 'col-resize' : 'row-resize';
+    const rect = grid.getBoundingClientRect();
+    const cs = getComputedStyle(grid);
+    const gap = parseFloat(horiz ? cs.columnGap : cs.rowGap) || 6;
+    let latest = getR();
+    const move = (ev) => {
+      const pt = ev.touches ? ev.touches[0] : ev;
+      let r = horiz ? (pt.clientX - rect.left) / rect.width : (pt.clientY - rect.top) / rect.height;
+      r = Math.max(0.2, Math.min(0.8, r));
+      latest = r;
+      if (horiz) {
         grid.style.gridTemplateColumns = `${r}fr ${(1 - r).toFixed(4)}fr`;
         handle.style.left = (r * (rect.width - gap) + gap / 2) + 'px';
-      };
-      const end = () => {
-        handle.classList.remove('dragging');
-        document.body.style.cursor = '';
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', end);
-        window.removeEventListener('touchmove', move);
-        window.removeEventListener('touchend', end);
-        state.layoutRatios[layout] = Math.round(latest * 1000) / 1000;
-        saveState();
-        render();
-      };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', end);
-      window.addEventListener('touchmove', move, { passive: false });
-      window.addEventListener('touchend', end);
+      } else {
+        grid.style.gridTemplateRows = `${r}fr ${(1 - r).toFixed(4)}fr`;
+        handle.style.top = (r * (rect.height - gap) + gap / 2) + 'px';
+      }
     };
-    handle.addEventListener('mousedown', start);
-    handle.addEventListener('touchstart', start, { passive: false });
-  });
+    const end = () => {
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+      store[layout] = Math.round(latest * 1000) / 1000;
+      saveState();
+      render();
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', end);
+  };
+  handle.addEventListener('mousedown', start);
+  handle.addEventListener('touchstart', start, { passive: false });
 }
 
 function resetLayoutRatios() {
   state.layoutRatios = {};
+  state.layoutRowRatios = {};
   saveState();
   render();
   showToast('칸 비율을 초기화했습니다', 'success');
