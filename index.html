@@ -88,6 +88,9 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-4); }
+  .col-resizer { position:absolute; top:0; bottom:0; width:20px; transform:translateX(-50%); cursor:col-resize; z-index:6; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  .col-resizer .grip { display:block; width:6px; height:48px; max-height:55%; background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.22); border-radius:5px; box-shadow:0 1px 5px rgba(0,0,0,.4); transition:background .15s, transform .1s; pointer-events:none; }
+  .col-resizer:hover .grip, .col-resizer.dragging .grip { background:var(--accent); transform:scaleX(1.25); }
   @media (max-width: 700px) {
     .two-col { grid-template-columns: 1fr !important; }
     .container { padding: 16px 12px 60px; }
@@ -153,8 +156,12 @@
     </div>
 
     <div class="card" style="margin-bottom:12px;">
-      <h3 style="font-size:13px;margin-bottom:10px;">이미지 레이아웃</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="font-size:13px;margin:0;">이미지 레이아웃</h3>
+        <button class="secondary-btn" onclick="resetLayoutRatios()" style="padding:3px 8px;font-size:11px;">↺ 칸 비율 초기화</button>
+      </div>
       <div id="layoutPicker" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;"></div>
+      <p id="resizeHint" style="font-size:11px;color:var(--text-4);margin:8px 0 0;line-height:1.5;display:none;">↔ 미리보기에서 칸 사이의 손잡이를 마우스로 드래그하면 칸 넓이를 조절할 수 있어요.</p>
     </div>
 
     <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
@@ -440,8 +447,16 @@ const state = {
   titleFont: 'inherit',
   iconSize: 40,           // 게임 아이콘 크기(px)
   iconShape: 'circle',    // 'circle' | 'rounded' | 'square'
+  layoutRatios: {},       // 레이아웃별 칸 넓이 비율(좌측 칸 비중 0.2~0.8)
   selectedCards: []  // 묶음 내보내기용 선택 카드 ID
 };
+
+// 칸 넓이 조절 가능한 레이아웃의 기본 비율(좌측 칸 비중)
+const DEFAULT_RATIOS = { '2h':0.5, '1+2':0.5, '2+1':0.5, '1+3':0.667, '1+4':0.6 };
+function getRatio(layout) {
+  const r = state.layoutRatios && state.layoutRatios[layout];
+  return (typeof r === 'number' && r >= 0.2 && r <= 0.8) ? r : (DEFAULT_RATIOS[layout] || 0.5);
+}
 
 const presets = {
   grayge:    { bg:'#ffffff', title:'#3a3833', text:'#5a5752', tag:'#8a7ab8', border:'#e0ddd6', iconBg:'#c8b896', iconText:'#ffffff' },
@@ -457,17 +472,12 @@ const layouts = [
   { id:'auto', label:'자동', svg:'<text x="20" y="26" text-anchor="middle" font-size="11" font-weight="500">AUTO</text>' },
   { id:'1', label:'1장', svg:'<rect x="6" y="6" width="28" height="28" rx="2"/>' },
   { id:'2h', label:'2-가로', svg:'<rect x="6" y="13" width="13" height="14" rx="2"/><rect x="21" y="13" width="13" height="14" rx="2"/>' },
-  { id:'2v', label:'2-세로', svg:'<rect x="6" y="6" width="28" height="13" rx="2"/><rect x="6" y="21" width="28" height="13" rx="2"/>' },
+  { id:'col', label:'세로 나열', svg:'<rect x="6" y="6" width="28" height="8" rx="2"/><rect x="6" y="16" width="28" height="8" rx="2"/><rect x="6" y="26" width="28" height="8" rx="2"/>' },
   { id:'1+2', label:'좌1+우2', svg:'<rect x="6" y="6" width="13" height="28" rx="2"/><rect x="21" y="6" width="13" height="13" rx="2"/><rect x="21" y="21" width="13" height="13" rx="2"/>' },
   { id:'2+1', label:'좌2+우1', svg:'<rect x="6" y="6" width="13" height="13" rx="2"/><rect x="6" y="21" width="13" height="13" rx="2"/><rect x="21" y="6" width="13" height="28" rx="2"/>' },
-  { id:'3v', label:'3-세로', svg:'<rect x="6" y="6" width="28" height="8" rx="2"/><rect x="6" y="16" width="28" height="8" rx="2"/><rect x="6" y="26" width="28" height="8" rx="2"/>' },
   { id:'2x2', label:'2x2', svg:'<rect x="6" y="6" width="13" height="13" rx="2"/><rect x="21" y="6" width="13" height="13" rx="2"/><rect x="6" y="21" width="13" height="13" rx="2"/><rect x="21" y="21" width="13" height="13" rx="2"/>' },
   { id:'1+3', label:'좌1+우3', svg:'<rect x="6" y="6" width="17" height="28" rx="2"/><rect x="25" y="6" width="9" height="8" rx="2"/><rect x="25" y="16" width="9" height="8" rx="2"/><rect x="25" y="26" width="9" height="8" rx="2"/>' },
-  { id:'3h', label:'3-가로', svg:'<rect x="5" y="13" width="9" height="14" rx="2"/><rect x="15.5" y="13" width="9" height="14" rx="2"/><rect x="26" y="13" width="9" height="14" rx="2"/>' },
-  { id:'top1+2', label:'위1+아래2', svg:'<rect x="6" y="6" width="28" height="15" rx="2"/><rect x="6" y="23" width="13" height="11" rx="2"/><rect x="21" y="23" width="13" height="11" rx="2"/>' },
-  { id:'2+1b', label:'위2+아래1', svg:'<rect x="6" y="6" width="13" height="11" rx="2"/><rect x="21" y="6" width="13" height="11" rx="2"/><rect x="6" y="19" width="28" height="15" rx="2"/>' },
   { id:'1+4', label:'좌1+우4', svg:'<rect x="5" y="6" width="16" height="28" rx="2"/><rect x="23" y="6" width="5.5" height="13" rx="1.5"/><rect x="29.5" y="6" width="5.5" height="13" rx="1.5"/><rect x="23" y="21" width="5.5" height="13" rx="1.5"/><rect x="29.5" y="21" width="5.5" height="13" rx="1.5"/>' },
-  { id:'4h', label:'4-가로', svg:'<rect x="4" y="15" width="7" height="10" rx="1.5"/><rect x="12.5" y="15" width="7" height="10" rx="1.5"/><rect x="21" y="15" width="7" height="10" rx="1.5"/><rect x="29.5" y="15" width="7" height="10" rx="1.5"/>' },
   { id:'grid', label:'그리드', svg:'<rect x="6" y="6" width="8" height="8" rx="1.5"/><rect x="16" y="6" width="8" height="8" rx="1.5"/><rect x="26" y="6" width="8" height="8" rx="1.5"/><rect x="6" y="16" width="8" height="8" rx="1.5"/><rect x="16" y="16" width="8" height="8" rx="1.5"/><rect x="26" y="16" width="8" height="8" rx="1.5"/><rect x="6" y="26" width="8" height="8" rx="1.5"/><rect x="16" y="26" width="8" height="8" rx="1.5"/><rect x="26" y="26" width="8" height="8" rx="1.5"/>' }
 ];
 
@@ -508,7 +518,8 @@ function saveState() {
       showActions: state.showActions,
       titleFont: state.titleFont,
       iconSize: state.iconSize,
-      iconShape: state.iconShape
+      iconShape: state.iconShape,
+      layoutRatios: state.layoutRatios
     }));
     updateSaveStatus();
   } catch(e) {
@@ -534,6 +545,7 @@ function loadState() {
     if (typeof data.titleFont === 'string') state.titleFont = data.titleFont;
     if (typeof data.iconSize === 'number') state.iconSize = data.iconSize;
     if (typeof data.iconShape === 'string') state.iconShape = data.iconShape;
+    if (data.layoutRatios && typeof data.layoutRatios === 'object') state.layoutRatios = data.layoutRatios;
   } catch(e) { console.warn('Load failed:', e); }
 }
 
@@ -1275,7 +1287,7 @@ function generateCardHtml(card, forExport) {
   const imagesForOutput = forExport
     ? (s.images||[]).map((img, i) => img.isLocal ? { ...img, src: `[로컬사진${i+1}_URL]` } : img)
     : (s.images||[]);
-  const imageBlock = buildImageBlock(imagesForOutput, s.layout || 'smart');
+  const imageBlock = buildImageBlock(imagesForOutput, s.layout || 'smart', forExport);
 
   const iconHtml = buildIconHtml(gameIcon, gameTitle, iconBg, iconText);
 
@@ -1310,7 +1322,7 @@ function generateCardHtml(card, forExport) {
     ${iconHtml}
     <span style="flex:1;font-size:14px;color:${title};letter-spacing:2px;font-weight:500;text-transform:uppercase;font-family:${escapeHtml(titleFont)};">${gameTitle}</span>
   </div>
-  <div style="padding:0 24px;">${imageBlock}</div>
+  <div style="padding:0;">${imageBlock}</div>
   ${actionRow}
   <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 24px 4px;gap:12px;">
     <span style="font-size:13px;color:${title};font-weight:500;letter-spacing:0.5px;">${dateText}</span>
@@ -1441,7 +1453,7 @@ function getAutoLayout(count) {
 // 스마트 모자이크: 각 이미지의 비율을 분석해서 자연스러운 그리드 생성
 function buildSmartGrid(images) {
   const imgStyle = `display:block;width:100% !important;height:100% !important;max-width:none !important;object-fit:cover;`;
-  const cellBase = `overflow:hidden;background:#eee;border-radius:4px;`;
+  const cellBase = `overflow:hidden;background:transparent;border-radius:4px;`;
   const img = u => `<img src="${escapeHtml(u)}" style="${imgStyle}" alt="">`;
 
   const n = images.length;
@@ -1512,31 +1524,35 @@ function buildSmartGrid(images) {
   return html;
 }
 
-function buildImageBlock(images, layout) {
+function buildImageBlock(images, layout, forExport) {
   if (images.length === 0) {
     return `<div style="width:100%;aspect-ratio:11/9;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;font-size:14px;">사진을 추가하세요</div>`;
   }
   if (layout === 'smart') return buildSmartGrid(images);
   if (layout === 'auto') layout = getAutoLayout(images.length);
   const imgStyle = `display:block;width:100% !important;height:100% !important;max-width:none !important;object-fit:cover;`;
-  const cellBase = `overflow:hidden;background:#eee;`;
+  const cellBase = `overflow:hidden;background:transparent;`;
   const img = u => `<img src="${escapeHtml(u)}" style="${imgStyle}" alt="">`;
   const cell = (u, extra='') => `<div style="${cellBase}${extra}">${img(u)}</div>`;
   const urls = images.map(i => i.src);
+  // 칸 넓이 조절: 미리보기에는 data-rz 마커를 달아 드래그 핸들을 붙이고, 저장된 비율로 컬럼 폭 계산
+  const colTpl = (id) => { const r = getRatio(id); return `${r}fr ${(1-r).toFixed(4)}fr`; };
+  const rz = (id) => forExport ? '' : ` data-rz="${id}"`;
 
   if (layout === '1') return `<div style="width:100%;aspect-ratio:11/9;${cellBase}border-radius:4px;">${img(urls[0])}</div>`;
-  if (layout === '2h' && urls.length >= 2) return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;aspect-ratio:2/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}</div>`;
+  if (layout === 'col') return `<div style="display:grid;gap:6px;">${images.map(im => `<div style="${cellBase}border-radius:4px;aspect-ratio:${im.ratio || 1.4};">${img(im.src)}</div>`).join('')}</div>`;
+  if (layout === '2h' && urls.length >= 2) return `<div${rz('2h')} style="display:grid;grid-template-columns:${colTpl('2h')};gap:6px;aspect-ratio:2/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}</div>`;
   if (layout === '2v' && urls.length >= 2) return `<div style="display:grid;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:13/14;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}</div>`;
-  if (layout === '1+2' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
-  if (layout === '2+1' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}<div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[1])}</div>${cell(urls[2],'border-radius:4px;')}</div>`;
+  if (layout === '1+2' && urls.length >= 3) return `<div${rz('1+2')} style="display:grid;grid-template-columns:${colTpl('1+2')};grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
+  if (layout === '2+1' && urls.length >= 3) return `<div${rz('2+1')} style="display:grid;grid-template-columns:${colTpl('2+1')};grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}<div style="${cellBase}border-radius:4px;grid-row:1/3;">${img(urls[1])}</div>${cell(urls[2],'border-radius:4px;')}</div>`;
   if (layout === '3v' && urls.length >= 3) return `<div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;aspect-ratio:11/15;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
   if (layout === '2x2' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div>`;
-  if (layout === '1+3' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:2fr 1fr;gap:6px;aspect-ratio:11/10;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div></div>`;
+  if (layout === '1+3' && urls.length >= 4) return `<div${rz('1+3')} style="display:grid;grid-template-columns:${colTpl('1+3')};gap:6px;aspect-ratio:11/10;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div></div>`;
   if (layout === '3h' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;aspect-ratio:3/1.4;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
   if (layout === 'top1+2' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"><div style="${cellBase}border-radius:4px;grid-column:1/3;aspect-ratio:2/1;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}${cell(urls[2],'border-radius:4px;aspect-ratio:1;')}</div>`;
   if (layout === '2+1b' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${cell(urls[0],'border-radius:4px;aspect-ratio:1;')}${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}<div style="${cellBase}border-radius:4px;grid-column:1/3;aspect-ratio:2/1;">${img(urls[2])}</div></div>`;
   if (layout === '4h' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">${cell(urls[0],'border-radius:4px;aspect-ratio:1;')}${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}${cell(urls[2],'border-radius:4px;aspect-ratio:1;')}${cell(urls[3],'border-radius:4px;aspect-ratio:1;')}</div>`;
-  if (layout === '1+4' && urls.length >= 5) return `<div style="display:grid;grid-template-columns:3fr 2fr;gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}${cell(urls[4],'border-radius:4px;')}</div></div>`;
+  if (layout === '1+4' && urls.length >= 5) return `<div${rz('1+4')} style="display:grid;grid-template-columns:${colTpl('1+4')};gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}${cell(urls[4],'border-radius:4px;')}</div></div>`;
   let cols = 3;
   if (urls.length === 4) cols = 2;
   const cells = urls.map(u => cell(u, 'aspect-ratio:1;border-radius:4px;')).join('');
@@ -1567,7 +1583,7 @@ function generateHtml(forExport) {
   const imagesForOutput = forExport
     ? state.images.map((img, i) => img.isLocal ? { ...img, src: `[로컬사진${i+1}_URL]` } : img)
     : state.images;
-  const imageBlock = buildImageBlock(imagesForOutput, state.layout);
+  const imageBlock = buildImageBlock(imagesForOutput, state.layout, forExport);
 
   // 큰 인스타 스타일 아이콘
   const iconHtml = buildIconHtml(gameIcon, gameTitle, iconBg, iconText);
@@ -1602,7 +1618,7 @@ function generateHtml(forExport) {
     ${iconHtml}
     <span style="flex:1;font-size:14px;color:${title};letter-spacing:2px;font-weight:500;text-transform:uppercase;font-family:${escapeHtml(state.titleFont || 'inherit')};">${gameTitle}</span>
   </div>
-  <div style="padding:0 24px;">${imageBlock}</div>
+  <div style="padding:0;">${imageBlock}</div>
   ${actionRow}
   <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 24px 4px;gap:16px;">
     <span style="font-size:14px;color:${title};font-weight:500;letter-spacing:0.5px;">${dateText}</span>
@@ -1618,6 +1634,70 @@ function render() {
   $('preview').innerHTML = generateHtml(false);
   $('htmlOutput').value = generateHtml(true);
   $('localWarn').style.display = state.images.some(i => i.isLocal) ? 'block' : 'none';
+  attachResizers();
+}
+
+// 미리보기에 칸 넓이 드래그 핸들 부착
+function attachResizers() {
+  const preview = $('preview');
+  if (!preview) return;
+  const targets = preview.querySelectorAll('[data-rz]');
+  const hint = $('resizeHint');
+  if (hint) hint.style.display = targets.length ? 'block' : 'none';
+  targets.forEach(grid => {
+    const layout = grid.getAttribute('data-rz');
+    grid.style.position = 'relative';
+    const gap = parseFloat(getComputedStyle(grid).columnGap) || 6;
+    const handle = document.createElement('div');
+    handle.className = 'col-resizer';
+    handle.innerHTML = '<span class="grip"></span>';
+    grid.appendChild(handle);
+    const place = () => {
+      const w = grid.clientWidth;
+      const r = getRatio(layout);
+      handle.style.left = (r * (w - gap) + gap / 2) + 'px';
+    };
+    place();
+    const start = (e) => {
+      e.preventDefault();
+      handle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      const rect = grid.getBoundingClientRect();
+      let latest = getRatio(layout);
+      const move = (ev) => {
+        const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        let r = (cx - rect.left) / rect.width;
+        r = Math.max(0.2, Math.min(0.8, r));
+        latest = r;
+        grid.style.gridTemplateColumns = `${r}fr ${(1 - r).toFixed(4)}fr`;
+        handle.style.left = (r * (rect.width - gap) + gap / 2) + 'px';
+      };
+      const end = () => {
+        handle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', end);
+        window.removeEventListener('touchmove', move);
+        window.removeEventListener('touchend', end);
+        state.layoutRatios[layout] = Math.round(latest * 1000) / 1000;
+        saveState();
+        render();
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', end);
+    };
+    handle.addEventListener('mousedown', start);
+    handle.addEventListener('touchstart', start, { passive: false });
+  });
+}
+
+function resetLayoutRatios() {
+  state.layoutRatios = {};
+  saveState();
+  render();
+  showToast('칸 비율을 초기화했습니다', 'success');
 }
 
 function copyHtml() {
