@@ -212,6 +212,19 @@
             </optgroup>
           </select>
 
+          <label style="margin-bottom:6px;">게임 아이콘 크기 / 모양</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+            <input type="range" id="iconSizeRange" min="20" max="80" step="1" style="flex:1;cursor:pointer;accent-color:var(--accent);">
+            <input type="number" id="iconSizeNum" min="12" max="200" style="width:58px;font-size:12px;padding:6px;">
+            <span style="font-size:11px;color:var(--text-4);">px</span>
+            <select id="iconShape" style="width:auto;font-size:12px;padding:6px 8px;">
+              <option value="circle">원형</option>
+              <option value="rounded">둥근사각</option>
+              <option value="square">사각</option>
+            </select>
+          </div>
+          <p style="font-size:11px;color:var(--text-4);margin:0 0 10px;line-height:1.5;">티스토리에 붙여넣을 때 아이콘이 커지지 않도록 크기를 px로 고정합니다.</p>
+
           <label style="margin-bottom:6px;">카드 표시 옵션</label>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text-2);cursor:pointer;margin:0;">
@@ -425,6 +438,8 @@ const state = {
   customThemes: [],
   showActions: true,
   titleFont: 'inherit',
+  iconSize: 40,           // 게임 아이콘 크기(px)
+  iconShape: 'circle',    // 'circle' | 'rounded' | 'square'
   selectedCards: []  // 묶음 내보내기용 선택 카드 ID
 };
 
@@ -448,6 +463,11 @@ const layouts = [
   { id:'3v', label:'3-세로', svg:'<rect x="6" y="6" width="28" height="8" rx="2"/><rect x="6" y="16" width="28" height="8" rx="2"/><rect x="6" y="26" width="28" height="8" rx="2"/>' },
   { id:'2x2', label:'2x2', svg:'<rect x="6" y="6" width="13" height="13" rx="2"/><rect x="21" y="6" width="13" height="13" rx="2"/><rect x="6" y="21" width="13" height="13" rx="2"/><rect x="21" y="21" width="13" height="13" rx="2"/>' },
   { id:'1+3', label:'좌1+우3', svg:'<rect x="6" y="6" width="17" height="28" rx="2"/><rect x="25" y="6" width="9" height="8" rx="2"/><rect x="25" y="16" width="9" height="8" rx="2"/><rect x="25" y="26" width="9" height="8" rx="2"/>' },
+  { id:'3h', label:'3-가로', svg:'<rect x="5" y="13" width="9" height="14" rx="2"/><rect x="15.5" y="13" width="9" height="14" rx="2"/><rect x="26" y="13" width="9" height="14" rx="2"/>' },
+  { id:'top1+2', label:'위1+아래2', svg:'<rect x="6" y="6" width="28" height="15" rx="2"/><rect x="6" y="23" width="13" height="11" rx="2"/><rect x="21" y="23" width="13" height="11" rx="2"/>' },
+  { id:'2+1b', label:'위2+아래1', svg:'<rect x="6" y="6" width="13" height="11" rx="2"/><rect x="21" y="6" width="13" height="11" rx="2"/><rect x="6" y="19" width="28" height="15" rx="2"/>' },
+  { id:'1+4', label:'좌1+우4', svg:'<rect x="5" y="6" width="16" height="28" rx="2"/><rect x="23" y="6" width="5.5" height="13" rx="1.5"/><rect x="29.5" y="6" width="5.5" height="13" rx="1.5"/><rect x="23" y="21" width="5.5" height="13" rx="1.5"/><rect x="29.5" y="21" width="5.5" height="13" rx="1.5"/>' },
+  { id:'4h', label:'4-가로', svg:'<rect x="4" y="15" width="7" height="10" rx="1.5"/><rect x="12.5" y="15" width="7" height="10" rx="1.5"/><rect x="21" y="15" width="7" height="10" rx="1.5"/><rect x="29.5" y="15" width="7" height="10" rx="1.5"/>' },
   { id:'grid', label:'그리드', svg:'<rect x="6" y="6" width="8" height="8" rx="1.5"/><rect x="16" y="6" width="8" height="8" rx="1.5"/><rect x="26" y="6" width="8" height="8" rx="1.5"/><rect x="6" y="16" width="8" height="8" rx="1.5"/><rect x="16" y="16" width="8" height="8" rx="1.5"/><rect x="26" y="16" width="8" height="8" rx="1.5"/><rect x="6" y="26" width="8" height="8" rx="1.5"/><rect x="16" y="26" width="8" height="8" rx="1.5"/><rect x="26" y="26" width="8" height="8" rx="1.5"/>' }
 ];
 
@@ -486,7 +506,9 @@ function saveState() {
       recentTags: state.recentTags,
       customThemes: state.customThemes,
       showActions: state.showActions,
-      titleFont: state.titleFont
+      titleFont: state.titleFont,
+      iconSize: state.iconSize,
+      iconShape: state.iconShape
     }));
     updateSaveStatus();
   } catch(e) {
@@ -510,6 +532,8 @@ function loadState() {
     if (Array.isArray(data.customThemes)) state.customThemes = data.customThemes;
     if (typeof data.showActions === 'boolean') state.showActions = data.showActions;
     if (typeof data.titleFont === 'string') state.titleFont = data.titleFont;
+    if (typeof data.iconSize === 'number') state.iconSize = data.iconSize;
+    if (typeof data.iconShape === 'string') state.iconShape = data.iconShape;
   } catch(e) { console.warn('Load failed:', e); }
 }
 
@@ -1253,9 +1277,7 @@ function generateCardHtml(card, forExport) {
     : (s.images||[]);
   const imageBlock = buildImageBlock(imagesForOutput, s.layout || 'smart');
 
-  const iconHtml = gameIcon
-    ? `<span style="display:inline-block;width:40px;height:40px;border-radius:50%;overflow:hidden;background:${iconBg};padding:2px;box-sizing:border-box;flex-shrink:0;"><img src="${escapeHtml(gameIcon)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" alt=""></span>`
-    : `<span style="display:inline-flex;width:40px;height:40px;border-radius:50%;background:${iconBg};align-items:center;justify-content:center;color:${iconText};font-size:16px;font-weight:600;box-sizing:border-box;flex-shrink:0;">${gameTitle.charAt(0) || '★'}</span>`;
+  const iconHtml = buildIconHtml(gameIcon, gameTitle, iconBg, iconText);
 
   const commentsHtml = (s.comments||[]).map((cm, idx) => {
     const txt = escapeHtml(cm.text).replace(/\n/g, '<br>');
@@ -1411,13 +1433,14 @@ function getAutoLayout(count) {
     case 2: return '2h';
     case 3: return '1+2';
     case 4: return '2x2';
+    case 5: return '1+4';
     default: return 'grid';
   }
 }
 
 // 스마트 모자이크: 각 이미지의 비율을 분석해서 자연스러운 그리드 생성
 function buildSmartGrid(images) {
-  const imgStyle = `display:block;width:100%;height:100%;object-fit:cover;`;
+  const imgStyle = `display:block;width:100% !important;height:100% !important;max-width:none !important;object-fit:cover;`;
   const cellBase = `overflow:hidden;background:#eee;border-radius:4px;`;
   const img = u => `<img src="${escapeHtml(u)}" style="${imgStyle}" alt="">`;
 
@@ -1495,7 +1518,7 @@ function buildImageBlock(images, layout) {
   }
   if (layout === 'smart') return buildSmartGrid(images);
   if (layout === 'auto') layout = getAutoLayout(images.length);
-  const imgStyle = `display:block;width:100%;height:100%;object-fit:cover;`;
+  const imgStyle = `display:block;width:100% !important;height:100% !important;max-width:none !important;object-fit:cover;`;
   const cellBase = `overflow:hidden;background:#eee;`;
   const img = u => `<img src="${escapeHtml(u)}" style="${imgStyle}" alt="">`;
   const cell = (u, extra='') => `<div style="${cellBase}${extra}">${img(u)}</div>`;
@@ -1509,10 +1532,27 @@ function buildImageBlock(images, layout) {
   if (layout === '3v' && urls.length >= 3) return `<div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;aspect-ratio:11/15;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
   if (layout === '2x2' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;aspect-ratio:1/1;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div>`;
   if (layout === '1+3' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:2fr 1fr;gap:6px;aspect-ratio:11/10;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-rows:1fr 1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}</div></div>`;
+  if (layout === '3h' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;aspect-ratio:3/1.4;">${cell(urls[0],'border-radius:4px;')}${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}</div>`;
+  if (layout === 'top1+2' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"><div style="${cellBase}border-radius:4px;grid-column:1/3;aspect-ratio:2/1;">${img(urls[0])}</div>${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}${cell(urls[2],'border-radius:4px;aspect-ratio:1;')}</div>`;
+  if (layout === '2+1b' && urls.length >= 3) return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">${cell(urls[0],'border-radius:4px;aspect-ratio:1;')}${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}<div style="${cellBase}border-radius:4px;grid-column:1/3;aspect-ratio:2/1;">${img(urls[2])}</div></div>`;
+  if (layout === '4h' && urls.length >= 4) return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">${cell(urls[0],'border-radius:4px;aspect-ratio:1;')}${cell(urls[1],'border-radius:4px;aspect-ratio:1;')}${cell(urls[2],'border-radius:4px;aspect-ratio:1;')}${cell(urls[3],'border-radius:4px;aspect-ratio:1;')}</div>`;
+  if (layout === '1+4' && urls.length >= 5) return `<div style="display:grid;grid-template-columns:3fr 2fr;gap:6px;aspect-ratio:1/1;"><div style="${cellBase}border-radius:4px;">${img(urls[0])}</div><div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;">${cell(urls[1],'border-radius:4px;')}${cell(urls[2],'border-radius:4px;')}${cell(urls[3],'border-radius:4px;')}${cell(urls[4],'border-radius:4px;')}</div></div>`;
   let cols = 3;
   if (urls.length === 4) cols = 2;
   const cells = urls.map(u => cell(u, 'aspect-ratio:1;border-radius:4px;')).join('');
   return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;">${cells}</div>`;
+}
+
+// 게임 아이콘 HTML 생성 — 크기/모양 적용 + 티스토리에서 크기가 커지지 않도록 px와 !important로 고정
+function buildIconHtml(gameIcon, gameTitle, iconBg, iconText) {
+  const size = Math.max(12, Math.min(200, parseInt(state.iconSize) || 40));
+  const shape = state.iconShape || 'circle';
+  const radius = shape === 'circle' ? '50%' : (shape === 'rounded' ? Math.round(size * 0.22) + 'px' : '0');
+  const fs = Math.round(size * 0.4);
+  if (gameIcon) {
+    return `<span style="display:inline-block;width:${size}px !important;height:${size}px !important;border-radius:${radius};overflow:hidden;background:${iconBg};box-sizing:border-box;flex-shrink:0;vertical-align:middle;line-height:0;"><img src="${escapeHtml(gameIcon)}" width="${size}" height="${size}" style="width:${size}px !important;height:${size}px !important;max-width:none !important;min-width:0 !important;border-radius:${radius};object-fit:cover;display:block;" alt=""></span>`;
+  }
+  return `<span style="display:inline-flex;width:${size}px !important;height:${size}px !important;border-radius:${radius};background:${iconBg};align-items:center;justify-content:center;color:${iconText};font-size:${fs}px;font-weight:600;box-sizing:border-box;flex-shrink:0;vertical-align:middle;">${(gameTitle||'').charAt(0) || '★'}</span>`;
 }
 
 function generateHtml(forExport) {
@@ -1530,9 +1570,7 @@ function generateHtml(forExport) {
   const imageBlock = buildImageBlock(imagesForOutput, state.layout);
 
   // 큰 인스타 스타일 아이콘
-  const iconHtml = gameIcon
-    ? `<span style="display:inline-block;width:40px;height:40px;border-radius:50%;overflow:hidden;background:${iconBg};padding:2px;box-sizing:border-box;flex-shrink:0;"><img src="${escapeHtml(gameIcon)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" alt=""></span>`
-    : `<span style="display:inline-flex;width:40px;height:40px;border-radius:50%;background:${iconBg};align-items:center;justify-content:center;color:${iconText};font-size:16px;font-weight:600;box-sizing:border-box;flex-shrink:0;">${gameTitle.charAt(0) || '★'}</span>`;
+  const iconHtml = buildIconHtml(gameIcon, gameTitle, iconBg, iconText);
 
   // 코멘트들 - 첫 번째는 본문, 나머지는 답글 느낌
   const commentsHtml = state.comments.map((c, idx) => {
@@ -1659,6 +1697,25 @@ function init() {
   $('titleFont').value = state.titleFont;
   $('titleFont').addEventListener('change', (e) => {
     state.titleFont = e.target.value;
+    saveState(); render();
+  });
+
+  // 아이콘 크기/모양 초기화
+  function applyIconSize(val) {
+    let n = parseInt(val);
+    if (isNaN(n)) n = 40;
+    n = Math.max(12, Math.min(200, n));
+    state.iconSize = n;
+    $('iconSizeNum').value = n;
+    $('iconSizeRange').value = Math.max(20, Math.min(80, n));
+    saveState(); render();
+  }
+  applyIconSize(state.iconSize);
+  $('iconSizeRange').addEventListener('input', (e) => applyIconSize(e.target.value));
+  $('iconSizeNum').addEventListener('input', (e) => applyIconSize(e.target.value));
+  $('iconShape').value = state.iconShape;
+  $('iconShape').addEventListener('change', (e) => {
+    state.iconShape = e.target.value;
     saveState(); render();
   });
 
